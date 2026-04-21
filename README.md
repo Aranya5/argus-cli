@@ -1,4 +1,3 @@
-# argus-cli
 # Argus (`argus-cli`) 👁️
 
 > **The hundred-eyed guardian of your development environment.**
