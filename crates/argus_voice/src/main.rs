@@ -2,6 +2,52 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use std::sync::{Arc, Mutex};
 use vosk::{Model, Recognizer};
 
+// NEW IMPORTS FOR THE LOGGER
+use std::collections::HashSet;
+use std::fs::OpenOptions;
+use std::io::{Read, Write};
+
+// THE AUTO-LOGGER FUNCTION
+fn auto_build_grammar(spoken_text: &str) {
+    let file_path = "crates/argus_voice/discovered_grammar.json";
+    let mut words = HashSet::new();
+    
+    // 1. Read existing words if the file already exists
+    if let Ok(mut file) = std::fs::File::open(file_path) {
+        let mut content = String::new();
+        if file.read_to_string(&mut content).is_ok() {
+            // Strip out brackets and quotes to read the current list
+            let cleaned = content.replace("[", "").replace("]", "").replace("\"", "");
+            for word in cleaned.split(',') {
+                let w = word.trim();
+                if !w.is_empty() && w != "[unk]" {
+                    words.insert(w.to_string());
+                }
+            }
+        }
+    }
+
+    // 2. Add the new words you just spoke
+    let mut changed = false;
+    for word in spoken_text.split_whitespace() {
+        if words.insert(word.to_string()) {
+            changed = true;
+        }
+    }
+
+    // 3. If it found new words, rewrite the file in Vosk's exact JSON format
+    if changed {
+        let mut final_list: Vec<String> = words.into_iter().collect();
+        final_list.push("[unk]".to_string()); // Always append the unknown flag
+        
+        let json_string = format!("[\"{}\"]", final_list.join("\", \""));
+        
+        if let Ok(mut file) = OpenOptions::new().write(true).create(true).truncate(true).open(file_path) {
+            let _ = file.write_all(json_string.as_bytes());
+        }
+    }
+}
+
 fn main() {
     println!("Awakening Argus...");
 
@@ -46,9 +92,15 @@ fn main() {
             
             if rec.accept_waveform(&i16_data) == vosk::DecodingState::Finalized {
                 if let vosk::CompleteResult::Single(res) = rec.result() {
-                    // Prevent it from printing empty blank spaces
-                    if !res.text.trim().is_empty() {
-                        println!("Argus Heard: {}", res.text);
+                    let command = res.text.trim();
+                    
+                    if !command.is_empty() {
+                        println!("\nArgus Heard: '{}'", command);
+                        
+                        // NEW: Dynamically build our future grammar lock
+                        auto_build_grammar(command);
+                        
+                        // Your match statements will go here...
                     }
                 }
             }
