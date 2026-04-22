@@ -25,9 +25,9 @@ target
 /target/
 **/*.rs.bk
 
-# Ignore the offline AI model (Users will download this locally)
-crates/argus_voice/model/
-
 # OS generated files
 .DS_Store
 Thumbs.db
+
+# Ignore the offline AI model
+crates/argus_voice/model/
