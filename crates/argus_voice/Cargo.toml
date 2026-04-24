@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 vosk = "0.2.0"
 cpal = "0.15.2"
+argus_daemon = { path = "../argus_daemon" }

@@ -56,7 +56,6 @@ fn main() {
     let mic = host.default_input_device().expect("No microphone detected.");
     let config = mic.default_input_config().expect("Could not read mic config.");
     
-    // --> THESE ARE THE MISSING LINES <--
     // We extract the exact sample rate and channel count from your Mac's hardware
     let sample_rate = config.sample_rate().0 as f32;
     let channels = config.channels() as usize;
@@ -100,7 +99,26 @@ fn main() {
                         // NEW: Dynamically build our future grammar lock
                         auto_build_grammar(command);
                         
-                        // Your match statements will go here...
+                        // THE TRIGGER ENGINE
+                        // This is where we match the voice text to actual OS logic
+                        match command {
+                            "argus kill port three thousand" | "kill port three thousand" => {
+                                println!("--> ACTION: Initiating port termination protocol...");
+                                // Call the Daemon library!
+                                argus_daemon::assassinate_port(3000);
+                            },
+                            "argus kill port eighty eighty one" | "kill port eighty eighty one" => {
+                                println!("--> ACTION: Clearing Metro bundler port...");
+                                // Call the Daemon library!
+                                argus_daemon::assassinate_port(8081);
+                            },
+                            "argus sleep" | "sleep" => {
+                                println!("--> ACTION: Going dormant...");
+                            },
+                            _ => {
+                                // Silently ignore anything that isn't a command
+                            }
+                        }
                     }
                 }
             }

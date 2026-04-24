@@ -45,6 +45,7 @@ version = "0.1.0"
 name = "argus_voice"
 version = "0.1.0"
 dependencies = [
+ "argus_daemon",
  "cpal",
  "vosk",
 ]
