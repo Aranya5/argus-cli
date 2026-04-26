@@ -127,7 +127,7 @@ fn main() {
         None,
     ).expect("Failed to build audio stream.");
 
-    
+    stream.play().expect("Failed to start audio stream.");
 
     println!("---");
     println!("Argus is listening... (Press Ctrl+C to put him to sleep)");
