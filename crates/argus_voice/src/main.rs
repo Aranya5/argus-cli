@@ -1,6 +1,7 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use std::sync::{Arc, Mutex};
 use vosk::{Model, Recognizer};
+use std::time::{Instant, Duration};
 
 // THE ENTITY EXTRACTOR
 fn extract_dynamic_port(command: &str) -> Option<u16> {
@@ -80,13 +81,9 @@ fn main() {
     let model = Model::new(model_path).expect("CRITICAL FAILURE: Model not found.");
 
     // --- THE DYNAMIC GRAMMAR LOCK ---
-    // 1. Read the JSON file into memory (Vec<String>)
     let dynamic_grammar = load_grammar_file("crates/argus_voice/discovered_grammar.json");
-    
-    // 2. Convert it into a slice of references (Vec<&str>) to satisfy the C-wrapper
     let allowed_words: Vec<&str> = dynamic_grammar.iter().map(|s| s.as_str()).collect();
 
-    // 3. Inject the dynamic list into the brain
     let recognizer = Arc::new(Mutex::new(
         Recognizer::new_with_grammar(&model, sample_rate, &allowed_words).unwrap()
     ));
@@ -96,6 +93,11 @@ fn main() {
     let recognizer_clone = recognizer.clone();
     let err_fn = |err| eprintln!("an error occurred on stream: {}", err);
     
+    // --- THE WAKE STATE TRACKERS ---
+    let mut is_awake = false;
+    let mut last_wake_time = Instant::now();
+    let wake_timeout = Duration::from_secs(5);
+
     let stream = mic.build_input_stream(
         &config.into(),
         move |data: &[f32], _: &_| {
@@ -114,53 +116,68 @@ fn main() {
                 if let vosk::CompleteResult::Single(res) = rec.result() {
                     let command = res.text.trim();
                     
-                    // If the command is not empty AND is not just the [unk] noise flag
                     if !command.is_empty() && command != "[unk]" {
-                        println!("\nArgus Heard: '{}'", command);
                         
-                        let is_port_hit = command.contains("kill port") || 
-                                          command.contains("clear port") || 
-                                          command.contains("close port") || 
-                                          command.contains("terminate port");
+                        // 1. THE WAKE TRIGGER
+                        if command.contains("argus") || command.contains("august") {
+                            is_awake = true;
+                            last_wake_time = Instant::now();
+                            println!("\n[EYE OPENED] Yes, Aranya?");
+                        }
 
-                        if is_port_hit {
-                            if let Some(port) = extract_dynamic_port(command) {
-                                println!("--> ACTION: Initiating termination protocol for port {}...", port);
-                                argus_daemon::assassinate_port(port);
-                            } else {
-                                println!("--> [DAEMON] ERROR: I heard the command, but couldn't understand the port number.");
+                        // 2. THE EXECUTION BLOCK
+                        if is_awake && last_wake_time.elapsed() < wake_timeout {
+                            
+                            // Prevent triggering if you *only* said his name
+                            if command != "argus" && command != "august" {
+                                println!("--> Argus Executing: '{}'", command);
+                                
+                                let is_port_hit = command.contains("kill port") || 
+                                                  command.contains("clear port") || 
+                                                  command.contains("close port") || 
+                                                  command.contains("terminate port");
+
+                                if is_port_hit {
+                                    if let Some(port) = extract_dynamic_port(command) {
+                                        println!("--> ACTION: Initiating termination protocol for port {}...", port);
+                                        argus_daemon::assassinate_port(port);
+                                    } else {
+                                        println!("--> [DAEMON] ERROR: I heard the command, but couldn't understand the port number.");
+                                    }
+                                } 
+                                else if command.contains("system memory") {
+                                    println!("--> ACTION: Reading telemetry...");
+                                    argus_daemon::report_memory();
+                                } 
+                                else if command.contains("open code") {
+                                    println!("--> ACTION: Launching IDE...");
+                                    argus_daemon::launch_app("Visual Studio Code");
+                                } 
+                                else if command.contains("open browser") {
+                                    println!("--> ACTION: Launching Web...");
+                                    argus_daemon::launch_app("Safari"); 
+                                } 
+                                else if command.contains("clear") && command.contains("cache") {
+                                    println!("--> ACTION: Nuke protocol authorized. Clearing bundler cache...");
+                                    argus_daemon::clear_bundler_cache();
+                                }
+                                else if command.contains("nuke") && command.contains("node") {
+                                    println!("--> ACTION: Nuke protocol authorized. Rebuilding project...");
+                                    argus_daemon::nuke_node_modules();
+                                }
+                                else if command.contains("sleep") && !command.contains("port") {
+                                    println!("--> ACTION: Going dormant...");
+                                }
+
+                                // 3. RETURN TO SLEEP
+                                is_awake = false;
+                                println!("[EYE CLOSED] Task complete.");
                             }
                         } 
-                        else if command.contains("system memory") {
-                            println!("--> ACTION: Reading telemetry...");
-                            argus_daemon::report_memory();
-                        } 
-                        else if command.contains("open code") {
-                            println!("--> ACTION: Launching IDE...");
-                            argus_daemon::launch_app("Visual Studio Code");
-                        } 
-                        else if command.contains("open browser") {
-                            println!("--> ACTION: Launching Web...");
-                            argus_daemon::launch_app("Safari"); 
-                        } 
-                        else if command.contains("sleep") && !command.contains("port") {
-                            println!("--> ACTION: Going dormant...");
-                        }
-                        // 5. The Mobile Reset
-                        else if command.contains("clear") && command.contains("cache") {
-                            println!("--> ACTION: Nuke protocol authorized. Clearing bundler cache...");
-                            argus_daemon::clear_bundler_cache();
-                        }
-                        // // 6. The Database Ignition
-                        // else if command.contains("start database") || command.contains("open database") {
-                        //     println!("--> ACTION: Booting background services...");
-                        //     argus_daemon::start_database();
-                        // }
-                        
-                        // 7. The Nuke Protocol
-                        else if command.contains("nuke") && command.contains("node") {
-                            println!("--> ACTION: Nuke protocol authorized. Rebuilding project...");
-                            argus_daemon::nuke_node_modules();
+                        // 4. TIMEOUT (Waited too long after waking him up)
+                        else if is_awake && last_wake_time.elapsed() >= wake_timeout {
+                            is_awake = false;
+                            println!("\n[EYE CLOSED] Going dormant...");
                         }
                     }
                 }
