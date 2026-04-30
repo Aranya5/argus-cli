@@ -2,84 +2,105 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use std::sync::{Arc, Mutex};
 use vosk::{Model, Recognizer};
 
-// NEW IMPORTS FOR THE LOGGER
-use std::collections::HashSet;
-use std::fs::OpenOptions;
-use std::io::{Read, Write};
+// THE ENTITY EXTRACTOR
+fn extract_dynamic_port(command: &str) -> Option<u16> {
+    let mut target = command
+        .replace("argus", "")
+        .replace("august", "") 
+        .replace("kill port", "")
+        .replace("clear port", "")
+        .replace("close port", "")
+        .replace("terminate port", "")
+        .trim()
+        .to_string();
 
-// THE AUTO-LOGGER FUNCTION
-fn auto_build_grammar(spoken_text: &str) {
-    let file_path = "crates/argus_voice/discovered_grammar.json";
-    let mut words = HashSet::new();
-    
-    // 1. Read existing words if the file already exists
-    if let Ok(mut file) = std::fs::File::open(file_path) {
-        let mut content = String::new();
-        if file.read_to_string(&mut content).is_ok() {
-            // Strip out brackets and quotes to read the current list
-            let cleaned = content.replace("[", "").replace("]", "").replace("\"", "");
-            for word in cleaned.split(',') {
-                let w = word.trim();
-                if !w.is_empty() && w != "[unk]" {
-                    words.insert(w.to_string());
-                }
+    target = target
+        .replace("thousand", "zero zero zero")
+        .replace("hundred", "zero zero")
+        .replace("oh", "0"); // Translates the developer "oh" into a mathematical zero
+
+    // The Master Slang Dictionary
+    match target.as_str() {
+        "eighty eighty" => return Some(8080),
+        "eighty eighty one" => return Some(8081),
+        "eighty eight" => return Some(88),
+        "fifty one seventy three" => return Some(5173),
+        "fifty four thirty two" => return Some(5432), // Postgres
+        "thirty three 0 six" => return Some(3306),    // MySQL
+        "sixty three seventy nine" => return Some(6379), // Redis
+        "forty two 0 0" => return Some(4200),         // Angular
+        _ => {} 
+    }
+
+    let mut digit_string = String::new();
+    for word in target.split_whitespace() {
+        let digit = match word {
+            "zero" | "0" => "0", "one" => "1", "two" => "2", "three" => "3",
+            "four" => "4", "five" => "5", "six" => "6", "seven" => "7",
+            "eight" => "8", "nine" => "9",
+            _ => "" 
+        };
+        digit_string.push_str(digit);
+    }
+
+    digit_string.parse::<u16>().ok()
+}
+
+// Reads the external JSON file and parses it into a list of Strings
+fn load_grammar_file(file_path: &str) -> Vec<String> {
+    let mut words = Vec::new();
+    if let Ok(content) = std::fs::read_to_string(file_path) {
+        // Strip the JSON brackets and quotes
+        let cleaned = content.replace("[", "").replace("]", "").replace("\"", "");
+        for word in cleaned.split(',') {
+            let w = word.trim();
+            if !w.is_empty() {
+                words.push(w.to_string());
             }
         }
+    } else {
+        eprintln!("--> [WARNING] Could not locate discovered_grammar.json. Argus will crash.");
     }
-
-    // 2. Add the new words you just spoke
-    let mut changed = false;
-    for word in spoken_text.split_whitespace() {
-        if words.insert(word.to_string()) {
-            changed = true;
-        }
-    }
-
-    // 3. If it found new words, rewrite the file in Vosk's exact JSON format
-    if changed {
-        let mut final_list: Vec<String> = words.into_iter().collect();
-        final_list.push("[unk]".to_string()); // Always append the unknown flag
-        
-        let json_string = format!("[\"{}\"]", final_list.join("\", \""));
-        
-        if let Ok(mut file) = OpenOptions::new().write(true).create(true).truncate(true).open(file_path) {
-            let _ = file.write_all(json_string.as_bytes());
-        }
-    }
+    words
 }
 
 fn main() {
     println!("Awakening Argus...");
 
-    // 1. Find the mic and get its EXACT hardware specs
     let host = cpal::default_host();
     let mic = host.default_input_device().expect("No microphone detected.");
     let config = mic.default_input_config().expect("Could not read mic config.");
     
-    // We extract the exact sample rate and channel count from your Mac's hardware
     let sample_rate = config.sample_rate().0 as f32;
     let channels = config.channels() as usize;
 
     println!("Argus locked onto: {} ({} Hz, {} Channels)", mic.name().unwrap_or_else(|_| "Unknown".to_string()), sample_rate, channels);
 
-    // 2. Load the Model
     let model_path = "crates/argus_voice/model";
     let model = Model::new(model_path).expect("CRITICAL FAILURE: Model not found.");
-    let recognizer = Arc::new(Mutex::new(Recognizer::new(&model, sample_rate).unwrap()));
 
-    println!("Offline brain loaded successfully.");
+    // --- THE DYNAMIC GRAMMAR LOCK ---
+    // 1. Read the JSON file into memory (Vec<String>)
+    let dynamic_grammar = load_grammar_file("crates/argus_voice/discovered_grammar.json");
+    
+    // 2. Convert it into a slice of references (Vec<&str>) to satisfy the C-wrapper
+    let allowed_words: Vec<&str> = dynamic_grammar.iter().map(|s| s.as_str()).collect();
+
+    // 3. Inject the dynamic list into the brain
+    let recognizer = Arc::new(Mutex::new(
+        Recognizer::new_with_grammar(&model, sample_rate, &allowed_words).unwrap()
+    ));
+
+    println!("Grammar Lock Engaged from external JSON. Background noise will be ignored.");
 
     let recognizer_clone = recognizer.clone();
     let err_fn = |err| eprintln!("an error occurred on stream: {}", err);
     
-    // 3. Process the audio stream safely with an Amplifier
     let stream = mic.build_input_stream(
         &config.into(),
         move |data: &[f32], _: &_| {
-            // Software Audio Amplifier
-            let gain: f32 = 5.0; // Boosts the raw mic volume by 5x
+            let gain: f32 = 5.0; 
             
-            // We use the `channels` variable here to perfectly slice the stereo audio
             let i16_data: Vec<i16> = data.chunks_exact(channels)
                 .map(|chunk| {
                     let amplified = (chunk[0] * gain).clamp(-1.0, 1.0);
@@ -93,31 +114,37 @@ fn main() {
                 if let vosk::CompleteResult::Single(res) = rec.result() {
                     let command = res.text.trim();
                     
-                    if !command.is_empty() {
+                    // If the command is not empty AND is not just the [unk] noise flag
+                    if !command.is_empty() && command != "[unk]" {
                         println!("\nArgus Heard: '{}'", command);
                         
-                        // NEW: Dynamically build our future grammar lock
-                        auto_build_grammar(command);
-                        
-                        // THE TRIGGER ENGINE
-                        // This is where we match the voice text to actual OS logic
-                        match command {
-                            "argus kill port three thousand" | "kill port three thousand" => {
-                                println!("--> ACTION: Initiating port termination protocol...");
-                                // Call the Daemon library!
-                                argus_daemon::assassinate_port(3000);
-                            },
-                            "argus kill port eighty eighty one" | "kill port eighty eighty one" => {
-                                println!("--> ACTION: Clearing Metro bundler port...");
-                                // Call the Daemon library!
-                                argus_daemon::assassinate_port(8081);
-                            },
-                            "argus sleep" | "sleep" => {
-                                println!("--> ACTION: Going dormant...");
-                            },
-                            _ => {
-                                // Silently ignore anything that isn't a command
+                        let is_port_hit = command.contains("kill port") || 
+                                          command.contains("clear port") || 
+                                          command.contains("close port") || 
+                                          command.contains("terminate port");
+
+                        if is_port_hit {
+                            if let Some(port) = extract_dynamic_port(command) {
+                                println!("--> ACTION: Initiating termination protocol for port {}...", port);
+                                argus_daemon::assassinate_port(port);
+                            } else {
+                                println!("--> [DAEMON] ERROR: I heard the command, but couldn't understand the port number.");
                             }
+                        } 
+                        else if command.contains("system memory") {
+                            println!("--> ACTION: Reading telemetry...");
+                            argus_daemon::report_memory();
+                        } 
+                        else if command.contains("open code") {
+                            println!("--> ACTION: Launching IDE...");
+                            argus_daemon::launch_app("Visual Studio Code");
+                        } 
+                        else if command.contains("open browser") {
+                            println!("--> ACTION: Launching Web...");
+                            argus_daemon::launch_app("Safari"); 
+                        } 
+                        else if command.contains("sleep") && !command.contains("port") {
+                            println!("--> ACTION: Going dormant...");
                         }
                     }
                 }
