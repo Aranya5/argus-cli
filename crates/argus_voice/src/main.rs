@@ -146,6 +146,22 @@ fn main() {
                         else if command.contains("sleep") && !command.contains("port") {
                             println!("--> ACTION: Going dormant...");
                         }
+                        // 5. The Mobile Reset
+                        else if command.contains("clear") && command.contains("cache") {
+                            println!("--> ACTION: Nuke protocol authorized. Clearing bundler cache...");
+                            argus_daemon::clear_bundler_cache();
+                        }
+                        // // 6. The Database Ignition
+                        // else if command.contains("start database") || command.contains("open database") {
+                        //     println!("--> ACTION: Booting background services...");
+                        //     argus_daemon::start_database();
+                        // }
+                        
+                        // 7. The Nuke Protocol
+                        else if command.contains("nuke") && command.contains("node") {
+                            println!("--> ACTION: Nuke protocol authorized. Rebuilding project...");
+                            argus_daemon::nuke_node_modules();
+                        }
                     }
                 }
             }

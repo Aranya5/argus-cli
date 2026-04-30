@@ -41,3 +41,68 @@ pub fn launch_app(app_name: &str) {
         println!("--> [DAEMON] ERROR: Could not find application '{}'", app_name);
     }
 }
+
+
+// THE MOBILE RESET
+// Clears the Watchman cache and wipes the temporary Metro bundler files
+pub fn clear_bundler_cache() {
+    println!("--> [DAEMON] Executing mobile environment reset...");
+    
+    // 1. Clear Watchman
+    let _ = Command::new("sh")
+        .arg("-c")
+        .arg("watchman watch-del-all")
+        .output();
+        
+    // 2. Clear Metro Bundler Cache (macOS specific temp folder)
+    let _ = Command::new("sh")
+        .arg("-c")
+        .arg("rm -rf $TMPDIR/metro-* && rm -rf $TMPDIR/haste-map-*")
+        .output();
+
+    println!("--> [DAEMON] SUCCESS: Metro cache cleared and Watchman reset.");
+}
+
+// // THE DATABASE IGNITION
+// // Boots up MongoDB using Homebrew services
+// pub fn start_database() {
+//     println!("--> [DAEMON] Igniting local database...");
+    
+//     let output = Command::new("sh")
+//         .arg("-c")
+//         .arg("brew services start mongodb-community")
+//         .output()
+//         .expect("Failed to execute brew command");
+
+//     if output.status.success() {
+//         println!("--> [DAEMON] SUCCESS: MongoDB is now running in the background.");
+//     } else {
+//         println!("--> [DAEMON] WARNING: Database failed to start. Is Homebrew MongoDB installed?");
+//     }
+// }
+
+// THE NUKE PROTOCOL
+// Deletes node_modules and reinstalls dependencies
+pub fn nuke_node_modules() {
+    println!("--> [DAEMON] Initiating Nuke Protocol: node_modules...");
+    
+    // 1. Delete node_modules
+    let _ = Command::new("rm")
+        .arg("-rf")
+        .arg("node_modules")
+        .output();
+        
+    println!("--> [DAEMON] Deletion complete. Reinstalling dependencies...");
+
+    // 2. Run npm install (Inherits your current terminal's environment)
+    let status = Command::new("npm")
+        .arg("install")
+        .status()
+        .expect("Failed to execute npm install");
+
+    if status.success() {
+        println!("--> [DAEMON] SUCCESS: Project is fresh and dependencies are reinstalled.");
+    } else {
+        println!("--> [DAEMON] ERROR: npm install failed. Check your internet connection.");
+    }
+}
