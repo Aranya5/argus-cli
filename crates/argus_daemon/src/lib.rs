@@ -80,27 +80,54 @@ pub fn open_url(url: &str) {
     }
 }
 
-// 3d. TAB TERMINATOR
+// 3d. TAB TERMINATOR (Universal Browser Target)
 pub fn close_tab() {
-    println!("--> [DAEMON] Closing active website tab...");
+    println!("--> [DAEMON] Hunting for an active browser to close a tab...");
     
-    // Simulates pressing Cmd + W on the keyboard
+    // This AppleScript checks which browser is running and uses the correct syntax for it.
+    let script = r#"
+        if application "Google Chrome" is running then
+            tell application "Google Chrome" to close active tab of front window
+        else if application "Brave Browser" is running then
+            tell application "Brave Browser" to close active tab of front window
+        else if application "Safari" is running then
+            tell application "Safari" to close current tab of front window
+        end if
+    "#;
+    
     let _ = std::process::Command::new("osascript")
         .arg("-e")
-        .arg("tell application \"System Events\" to keystroke \"w\" using command down")
+        .arg(script)
         .output();
         
     println!("--> [DAEMON] SUCCESS: Tab closed.");
 }
 
-// 3e. RESURRECT TAB
+// 3e. RESURRECT TAB (Universal Browser Target)
 pub fn reopen_tab() {
     println!("--> [DAEMON] Resurrecting the last closed tab...");
     
-    // Simulates pressing Cmd + Shift + T on the keyboard
+    // This script activates the running browser and sends the correct keyboard shortcut.
+    // Chrome/Brave use Cmd+Shift+T. Safari uses Cmd+Z.
+    let script = r#"
+        if application "Google Chrome" is running then
+            tell application "Google Chrome" to activate
+            delay 0.1
+            tell application "System Events" to keystroke "t" using {command down, shift down}
+        else if application "Brave Browser" is running then
+            tell application "Brave Browser" to activate
+            delay 0.1
+            tell application "System Events" to keystroke "t" using {command down, shift down}
+        else if application "Safari" is running then
+            tell application "Safari" to activate
+            delay 0.1
+            tell application "System Events" to keystroke "z" using command down
+        end if
+    "#;
+    
     let _ = std::process::Command::new("osascript")
         .arg("-e")
-        .arg("tell application \"System Events\" to keystroke \"t\" using {command down, shift down}")
+        .arg(script)
         .output();
         
     println!("--> [DAEMON] SUCCESS: Previous tab restored.");
