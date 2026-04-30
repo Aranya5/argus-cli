@@ -27,21 +27,42 @@ pub fn report_memory() {
     println!("--> [DAEMON] Memory Usage: {} MB / {} MB", used, total);
 }
 
-/// Uses macOS native commands to launch any installed application
+// 3. APP LAUNCHER (Dynamic Upgrade)
 pub fn launch_app(app_name: &str) {
-    println!("--> [DAEMON] Booting {}...", app_name);
+    println!("--> [DAEMON] Attempting to boot '{}'...", app_name);
     
-    // 'open -a <Name>' is the Mac terminal command to launch apps
-    let status = Command::new("open")
+    let output = Command::new("open")
         .arg("-a")
         .arg(app_name)
-        .status();
+        .output()
+        .expect("Failed to execute open command");
 
-    if status.is_err() {
-        println!("--> [DAEMON] ERROR: Could not find application '{}'", app_name);
+    // macOS 'open' returns success if the app is found, and an error code if it isn't.
+    if output.status.success() {
+        println!("--> [DAEMON] SUCCESS: {} launched.", app_name);
+    } else {
+        println!("--> [DAEMON] ERROR: macOS could not find an app named '{}'. Is it installed?", app_name);
     }
 }
 
+// 3b. APP TERMINATOR
+pub fn close_app(app_name: &str) {
+    println!("--> [DAEMON] Requesting graceful shutdown for '{}'...", app_name);
+    
+    // We use osascript to tell the macOS UI to quit the app properly (like Cmd+Q)
+    let script = format!("quit app \"{}\"", app_name);
+    let output = Command::new("osascript")
+        .arg("-e")
+        .arg(&script)
+        .output()
+        .expect("Failed to execute osascript command");
+
+    if output.status.success() {
+        println!("--> [DAEMON] SUCCESS: {} closed.", app_name);
+    } else {
+        println!("--> [DAEMON] ERROR: macOS could not close '{}'. Is it actually running?", app_name);
+    }
+}
 
 // THE MOBILE RESET
 // Clears the Watchman cache and wipes the temporary Metro bundler files
