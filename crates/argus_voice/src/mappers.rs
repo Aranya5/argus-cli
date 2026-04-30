@@ -43,13 +43,17 @@ pub fn extract_dynamic_port(command: &str) -> Option<u16> {
 }
 
 pub fn map_url(spoken: &str) -> Option<&'static str> {
+    // We catch the exact words, AND the spaced-out acoustic versions
     match spoken {
         "google" => Some("https://google.com"),
-        "github" => Some("https://github.com"),
-        "youtube" => Some("https://youtube.com"),
-        "localhost" | "local" => Some("http://localhost:3000"), 
-        "vite" => Some("http://localhost:5173"), 
-        "backend" => Some("http://localhost:8080"), 
+        "github" | "git hub" | "get hub" => Some("https://github.com"),
+        "youtube" | "you tube" => Some("https://youtube.com"),
+        
+        // Developer Localhosts
+        "localhost" | "local host" | "local" => Some("http://localhost:3000"), 
+        "vite" | "veet" | "light" => Some("http://localhost:5173"), // Vosk sometimes hears "vite" as "veet" or "light"
+        "backend" | "back end" => Some("http://localhost:8080"), 
+        
         _ => None,
     }
 }

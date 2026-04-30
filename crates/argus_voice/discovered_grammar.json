@@ -1,5 +1,5 @@
 [
-  "oh", "argus", "august", "kill", "clear", "close", "terminate", "port", "open", 
+  "oh", "argus", "august", "kill", "clear", "close", "terminate", "port", "open", "reopen",
   "system", "status", "memory", "sleep", "wake", 
   "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", 
   "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety", "hundred", "thousand", 
@@ -9,7 +9,10 @@
   "xcode", "simulator", "studio", "figma", "photoshop", "illustrator", 
   "spotify", "slack", "discord", "notion", "notes", "calculator",
   
-  "site", "google", "github", "youtube", "localhost", "local", "vite", "backend", "tab", "window",
+  "site", "google", "github", "git", "hub", "get", 
+  "localhost", "local", "host", "vite", "veet", "light", "backend", "back", "end", "tab", "window",
+  
+  "last", "previous", "just",
   
   "[unk]"
 ]

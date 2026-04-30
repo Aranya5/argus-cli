@@ -93,6 +93,19 @@ pub fn close_tab() {
     println!("--> [DAEMON] SUCCESS: Tab closed.");
 }
 
+// 3e. RESURRECT TAB
+pub fn reopen_tab() {
+    println!("--> [DAEMON] Resurrecting the last closed tab...");
+    
+    // Simulates pressing Cmd + Shift + T on the keyboard
+    let _ = std::process::Command::new("osascript")
+        .arg("-e")
+        .arg("tell application \"System Events\" to keystroke \"t\" using {command down, shift down}")
+        .output();
+        
+    println!("--> [DAEMON] SUCCESS: Previous tab restored.");
+}
+
 // THE MOBILE RESET
 // Clears the Watchman cache and wipes the temporary Metro bundler files
 pub fn clear_bundler_cache() {
