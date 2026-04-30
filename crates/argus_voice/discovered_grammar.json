@@ -5,26 +5,11 @@
   "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety", "hundred", "thousand", 
   "bundler", "cache", "nuke", "node", "install", 
   
-  "code",
-  "terminal",
-  "iterm",
-  "chrome",
-  "safari",
-  "postman",
-  "docker",
-  "compass",
-  "xcode",
-  "simulator",
-  "studio",
-  "figma",
-  "photoshop",
-  "illustrator",
-  "spotify",
-  "slack",
-  "discord",
-  "notion",
-  "notes",
-  "calculator",
+  "code", "terminal", "iterm", "chrome", "safari", "postman", "docker", "compass", 
+  "xcode", "simulator", "studio", "figma", "photoshop", "illustrator", 
+  "spotify", "slack", "discord", "notion", "notes", "calculator",
+  
+  "site", "google", "github", "youtube", "localhost", "local", "vite", "backend", "tab", "window",
   
   "[unk]"
 ]

@@ -64,6 +64,35 @@ pub fn close_app(app_name: &str) {
     }
 }
 
+// 3c. URL LAUNCHER
+pub fn open_url(url: &str) {
+    println!("--> [DAEMON] Opening browser to '{}'...", url);
+    
+    let output = Command::new("open")
+        .arg(url)
+        .output()
+        .expect("Failed to execute open command");
+
+    if output.status.success() {
+        println!("--> [DAEMON] SUCCESS: Webpage launched.");
+    } else {
+        println!("--> [DAEMON] ERROR: macOS could not open the URL.");
+    }
+}
+
+// 3d. TAB TERMINATOR
+pub fn close_tab() {
+    println!("--> [DAEMON] Closing active website tab...");
+    
+    // Simulates pressing Cmd + W on the keyboard
+    let _ = std::process::Command::new("osascript")
+        .arg("-e")
+        .arg("tell application \"System Events\" to keystroke \"w\" using command down")
+        .output();
+        
+    println!("--> [DAEMON] SUCCESS: Tab closed.");
+}
+
 // THE MOBILE RESET
 // Clears the Watchman cache and wipes the temporary Metro bundler files
 pub fn clear_bundler_cache() {
