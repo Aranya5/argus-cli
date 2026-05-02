@@ -64,20 +64,40 @@ pub fn close_app(app_name: &str) {
     }
 }
 
-// 3c. URL LAUNCHER
+// 3c. URL LAUNCHER (Forced Native Browser)
 pub fn open_url(url: &str) {
-    println!("--> [DAEMON] Opening browser to '{}'...", url);
+    println!("--> [DAEMON] Forcing native browser for: {}", url);
     
-    let output = Command::new("open")
-        .arg(url)
-        .output()
-        .expect("Failed to execute open command");
-
-    if output.status.success() {
-        println!("--> [DAEMON] SUCCESS: Webpage launched.");
-    } else {
-        println!("--> [DAEMON] ERROR: macOS could not open the URL.");
-    }
+    // Instead of using standard 'open', we use AppleScript to bypass VS Code 
+    // and force your actual web browsers to handle the URL.
+    let script = format!(
+        r#"
+        if application "Google Chrome" is running then
+            tell application "Google Chrome"
+                activate
+                open location "{}"
+            end tell
+        else if application "Brave Browser" is running then
+            tell application "Brave Browser"
+                activate
+                open location "{}"
+            end tell
+        else
+            tell application "Safari"
+                activate
+                open location "{}"
+            end tell
+        end if
+        "#,
+        url, url, url
+    );
+    
+    let _ = std::process::Command::new("osascript")
+        .arg("-e")
+        .arg(&script)
+        .output();
+        
+    println!("--> [DAEMON] SUCCESS: Webpage launched in native browser.");
 }
 
 // 3d. TAB TERMINATOR (Universal Browser Target)

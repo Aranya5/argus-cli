@@ -1,4 +1,4 @@
-use crossterm::{
+ use crossterm::{
     event::{self, Event, KeyCode},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -11,52 +11,107 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, Paragraph, Row, Table},
     Terminal,
 };
-use std::{error::Error, io};
-use sysinfo::System; // NEW: The hardware monitor
+use std::{error::Error, io, process::Command, time::{Duration, Instant}};
+use sysinfo::System;
 
 // --- APP STATE ---
 struct AppState {
     voice_logs: Vec<String>,
-    active_ports: Vec<(&'static str, u16, &'static str)>,
+    // CHANGED: Now using Strings so we can dynamically generate them
+    active_ports: Vec<(String, String, String)>, 
     
-    // NEW: Live system monitoring variables
     sys: System, 
     ram_usage: String,
+    
+    // NEW: A timer to prevent our network scanner from frying your CPU
+    last_port_scan: Instant,
 }
 
 impl AppState {
     fn new() -> Self {
-        // Initialize the hardware monitor
         let mut sys = System::new_all();
         sys.refresh_memory();
 
         Self {
             voice_logs: vec![
-                "[10:42 AM] System Online. Awaiting voice input...".to_string(),
-                "[10:45 AM] HEARD: 'open site github'".to_string(),
-                "[10:45 AM] ACTION: Launching browser...".to_string(),
+                "[System] Core initialized.".to_string(),
+                "[System] Network scanner active...".to_string(),
             ],
-            active_ports: vec![
-                ("Vite/React", 5173, "ONLINE"),
-                ("Node/Express", 8080, "ONLINE"),
-                ("MongoDB", 27017, "LISTENING"),
-                ("Rust Daemon", 9999, "IDLE"),
-            ],
+            active_ports: Vec::new(),
             sys,
             ram_usage: String::new(),
+            // Force an immediate scan on boot
+            last_port_scan: Instant::now() - Duration::from_secs(10), 
         }
     }
 
-    // NEW: Function to recalculate RAM every frame
     fn update_telemetry(&mut self) {
         self.sys.refresh_memory();
-        
-        // Convert bytes to Gigabytes
         let used_gb = self.sys.used_memory() as f64 / 1_073_741_824.0;
         let total_gb = self.sys.total_memory() as f64 / 1_073_741_824.0;
         let percentage = (used_gb / total_gb) * 100.0;
-
         self.ram_usage = format!("{:.2} GB / {:.2} GB ({:.1}%)", used_gb, total_gb, percentage);
+    }
+
+    // NEW: The Upgraded, Bulletproof Network Scanner
+    fn update_network(&mut self) {
+        if self.last_port_scan.elapsed() < std::time::Duration::from_secs(2) {
+            return; 
+        }
+        self.last_port_scan = std::time::Instant::now();
+
+        let output = std::process::Command::new("lsof")
+            .args(["-iTCP", "-sTCP:LISTEN", "-P", "-n"])
+            .output();
+
+        if let Ok(output) = output {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let mut new_ports = Vec::new();
+
+            for line in stdout.lines().skip(1) {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.is_empty() { continue; }
+
+                let cmd = parts[0].to_string(); 
+                let mut extracted_port = String::new();
+
+                // SMARTER PARSING: Hunt for the port number anywhere in the text line
+                for part in &parts {
+                    if part.contains(':') {
+                        // Split by ':' (e.g., localhost:3000 -> 3000)
+                        if let Some(potential_port) = part.split(':').last() {
+                            // Verify it's actually a valid number
+                            if potential_port.parse::<u16>().is_ok() {
+                                extracted_port = potential_port.to_string();
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if !extracted_port.is_empty() {
+                    let friendly_name = match extracted_port.as_str() {
+                        "5173" => format!("Vite ({})", cmd),
+                        "3000" => format!("React/Next ({})", cmd),
+                        "8080" | "8000" => format!("Node API ({})", cmd),
+                        "27017" => format!("MongoDB ({})", cmd),
+                        "4321" => format!("Astro ({})", cmd), // Added Astro (common for portfolios!)
+                        _ => format!("Custom ({})", cmd), // Catch-all for weird framework ports
+                    };
+
+                    new_ports.push((friendly_name, extracted_port, "ONLINE".to_string()));
+                }
+            }
+
+            // Optional: Sort ports numerically so the UI doesn't jump around
+            new_ports.sort_by(|a, b| a.1.parse::<u16>().unwrap_or(0).cmp(&b.1.parse::<u16>().unwrap_or(0)));
+
+            if new_ports.is_empty() {
+                new_ports.push(("No dev ports found".to_string(), "---".to_string(), "IDLE".to_string()));
+            }
+
+            self.active_ports = new_ports;
+        }
     }
 }
 
@@ -82,10 +137,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut AppState) -> io::Result<()> {
     loop {
-        // 1. UPDATE DATA BEFORE DRAWING
+        // UPDATE ALL LIVE DATA BEFORE DRAWING
         app.update_telemetry();
+        app.update_network();
 
-        // 2. DRAW THE UI
         terminal.draw(|f| {
             let size = f.area();
 
@@ -109,7 +164,7 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut AppS
             .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Blue)));
             f.render_widget(header, main_chunks[0]);
 
-            // Port Monitor (Sidebar)
+            // Port Monitor (Now dynamic!)
             let selected_style = Style::default().fg(Color::Cyan);
             let normal_style = Style::default().fg(Color::White);
             
@@ -121,15 +176,15 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut AppS
             let rows = app.active_ports.iter().map(|item| {
                 let status_color = if item.2 == "ONLINE" { Color::Green } else { Color::Yellow };
                 Row::new(vec![
-                    Span::styled(item.0, normal_style),
-                    Span::styled(item.1.to_string(), selected_style),
-                    Span::styled(item.2, Style::default().fg(status_color)),
+                    Span::styled(&item.0, normal_style),
+                    Span::styled(&item.1, selected_style),
+                    Span::styled(&item.2, Style::default().fg(status_color)),
                 ])
             });
 
-            let port_table = Table::new(rows, [Constraint::Percentage(40), Constraint::Percentage(30), Constraint::Percentage(30)])
+            let port_table = Table::new(rows, [Constraint::Percentage(45), Constraint::Percentage(25), Constraint::Percentage(30)])
                 .header(header_row)
-                .block(Block::default().title(" NETWORK MANAGER ").borders(Borders::ALL).border_type(BorderType::Rounded).border_style(Style::default().fg(Color::DarkGray)));
+                .block(Block::default().title(" LIVE NETWORK MAP ").borders(Borders::ALL).border_type(BorderType::Rounded).border_style(Style::default().fg(Color::DarkGray)));
             f.render_widget(port_table, body_chunks[0]);
 
             let right_chunks = Layout::default()
@@ -140,17 +195,17 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut AppS
             // Logs
             let log_text: Vec<Line> = app.voice_logs.iter().map(|log| Line::from(Span::styled(log, normal_style))).collect();
             let logs = Paragraph::new(log_text)
-                .block(Block::default().title(" VOICE PROTOCOL LOGS ").borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray)));
+                .block(Block::default().title(" SYSTEM LOGS ").borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray)));
             f.render_widget(logs, right_chunks[0]);
 
-            // Telemetry (Now using live data!)
+            // Telemetry
             let telemetry_text = Paragraph::new(format!("\n > System RAM Allocation: {}", app.ram_usage))
                 .style(Style::default().fg(Color::Magenta))
                 .block(Block::default().title(" TELEMETRY ").borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray)));
             f.render_widget(telemetry_text, right_chunks[1]);
         })?;
 
-        // 3. LISTEN FOR KEYBOARD INPUT
+        // 50ms loop speed
         if event::poll(std::time::Duration::from_millis(50))? {
             if let Event::Key(key) = event::read()? {
                 if let KeyCode::Char('q') = key.code {
