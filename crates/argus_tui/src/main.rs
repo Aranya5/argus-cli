@@ -12,19 +12,25 @@ use ratatui::{
     Terminal,
 };
 use std::{error::Error, io};
+use sysinfo::System; // NEW: The hardware monitor
 
 // --- APP STATE ---
-// This holds the actual data the UI will render.
 struct AppState {
     voice_logs: Vec<String>,
-    active_ports: Vec<(&'static str, u16, &'static str)>, // (Service, Port, Status)
+    active_ports: Vec<(&'static str, u16, &'static str)>,
+    
+    // NEW: Live system monitoring variables
+    sys: System, 
     ram_usage: String,
 }
 
 impl AppState {
     fn new() -> Self {
+        // Initialize the hardware monitor
+        let mut sys = System::new_all();
+        sys.refresh_memory();
+
         Self {
-            // Pre-filled with dummy data so you can see the layout
             voice_logs: vec![
                 "[10:42 AM] System Online. Awaiting voice input...".to_string(),
                 "[10:45 AM] HEARD: 'open site github'".to_string(),
@@ -36,13 +42,25 @@ impl AppState {
                 ("MongoDB", 27017, "LISTENING"),
                 ("Rust Daemon", 9999, "IDLE"),
             ],
-            ram_usage: "16.0 GB / 32.0 GB (50%)".to_string(),
+            sys,
+            ram_usage: String::new(),
         }
+    }
+
+    // NEW: Function to recalculate RAM every frame
+    fn update_telemetry(&mut self) {
+        self.sys.refresh_memory();
+        
+        // Convert bytes to Gigabytes
+        let used_gb = self.sys.used_memory() as f64 / 1_073_741_824.0;
+        let total_gb = self.sys.total_memory() as f64 / 1_073_741_824.0;
+        let percentage = (used_gb / total_gb) * 100.0;
+
+        self.ram_usage = format!("{:.2} GB / {:.2} GB ({:.1}%)", used_gb, total_gb, percentage);
     }
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    // Setup
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
@@ -52,7 +70,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut app_state = AppState::new();
     let res = run_app(&mut terminal, &mut app_state);
 
-    // Teardown
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     terminal.show_cursor()?;
@@ -65,22 +82,24 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut AppState) -> io::Result<()> {
     loop {
+        // 1. UPDATE DATA BEFORE DRAWING
+        app.update_telemetry();
+
+        // 2. DRAW THE UI
         terminal.draw(|f| {
             let size = f.area();
 
-            // 1. MASTER LAYOUT: Split into Top Header and Main Body
             let main_chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([Constraint::Length(3), Constraint::Min(0)].as_ref())
                 .split(size);
 
-            // 2. BODY LAYOUT: Split Main Body into Left Sidebar and Right Content
             let body_chunks = Layout::default()
                 .direction(Direction::Horizontal)
                 .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
                 .split(main_chunks[1]);
 
-            // --- WIDGET 1: HEADER ---
+            // Header
             let header = Paragraph::new(Line::from(vec![
                 Span::styled(" ARGUS CLI ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
                 Span::styled(" // v1.0.0 // STATUS: ", Style::default().fg(Color::DarkGray)),
@@ -90,7 +109,7 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut AppS
             .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Blue)));
             f.render_widget(header, main_chunks[0]);
 
-            // --- WIDGET 2: LEFT SIDEBAR (PORT MONITOR) ---
+            // Port Monitor (Sidebar)
             let selected_style = Style::default().fg(Color::Cyan);
             let normal_style = Style::default().fg(Color::White);
             
@@ -113,7 +132,6 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut AppS
                 .block(Block::default().title(" NETWORK MANAGER ").borders(Borders::ALL).border_type(BorderType::Rounded).border_style(Style::default().fg(Color::DarkGray)));
             f.render_widget(port_table, body_chunks[0]);
 
-            // --- WIDGET 3: RIGHT CONTENT (LOGS & TELEMETRY) ---
             let right_chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([Constraint::Percentage(70), Constraint::Percentage(30)].as_ref())
@@ -125,18 +143,18 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut AppS
                 .block(Block::default().title(" VOICE PROTOCOL LOGS ").borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray)));
             f.render_widget(logs, right_chunks[0]);
 
-            // Telemetry
+            // Telemetry (Now using live data!)
             let telemetry_text = Paragraph::new(format!("\n > System RAM Allocation: {}", app.ram_usage))
                 .style(Style::default().fg(Color::Magenta))
                 .block(Block::default().title(" TELEMETRY ").borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray)));
             f.render_widget(telemetry_text, right_chunks[1]);
         })?;
 
-        // --- KEYBOARD LISTENER ---
-        if event::poll(std::time::Duration::from_millis(16))? {
+        // 3. LISTEN FOR KEYBOARD INPUT
+        if event::poll(std::time::Duration::from_millis(50))? {
             if let Event::Key(key) = event::read()? {
                 if let KeyCode::Char('q') = key.code {
-                    return Ok(()); // Quit application
+                    return Ok(()); 
                 }
             }
         }
