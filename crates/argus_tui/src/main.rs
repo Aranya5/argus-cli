@@ -11,7 +11,7 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, Paragraph, Row, Table},
     Terminal,
 };
-use std::{error::Error, io, process::Command, time::{Duration, Instant}};
+use std::{error::Error, io, time::{Duration, Instant}};
 use sysinfo::System;
 
 // --- APP STATE ---
@@ -53,7 +53,7 @@ impl AppState {
         self.ram_usage = format!("{:.2} GB / {:.2} GB ({:.1}%)", used_gb, total_gb, percentage);
     }
 
-    // NEW: The Upgraded, Bulletproof Network Scanner
+   // NEW: The Filtered, Stable Network Scanner
     fn update_network(&mut self) {
         if self.last_port_scan.elapsed() < std::time::Duration::from_secs(2) {
             return; 
@@ -74,40 +74,52 @@ impl AppState {
 
                 let cmd = parts[0].to_string(); 
                 let mut extracted_port = String::new();
+                let mut port_number: u16 = 0;
 
-                // SMARTER PARSING: Hunt for the port number anywhere in the text line
                 for part in &parts {
                     if part.contains(':') {
-                        // Split by ':' (e.g., localhost:3000 -> 3000)
                         if let Some(potential_port) = part.split(':').last() {
-                            // Verify it's actually a valid number
-                            if potential_port.parse::<u16>().is_ok() {
+                            if let Ok(num) = potential_port.parse::<u16>() {
                                 extracted_port = potential_port.to_string();
+                                port_number = num;
                                 break;
                             }
                         }
                     }
                 }
 
-                if !extracted_port.is_empty() {
-                    let friendly_name = match extracted_port.as_str() {
-                        "5173" => format!("Vite ({})", cmd),
-                        "3000" => format!("React/Next ({})", cmd),
-                        "8080" | "8000" => format!("Node API ({})", cmd),
-                        "27017" => format!("MongoDB ({})", cmd),
-                        "4321" => format!("Astro ({})", cmd), // Added Astro (common for portfolios!)
-                        _ => format!("Custom ({})", cmd), // Catch-all for weird framework ports
+                // THE FILTER: Only care about actual Development Ports!
+                let is_dev_port = match port_number {
+                    3000..=3010 => true, // React, Next.js, Vue
+                    4000..=4010 => true, // General Dev
+                    4200 => true,        // Angular
+                    4321 => true,        // Astro
+                    5000..=5001 => true, // Python Flask
+                    5173 => true,        // Vite
+                    8000..=8080 => true, // Node, Express, Java
+                    27017 => true,       // MongoDB
+                    _ => false,          // IGNORE MAC BACKGROUND NOISE
+                };
+
+                if is_dev_port && !extracted_port.is_empty() {
+                    let friendly_name = match port_number {
+                        5173 => format!("Vite ({})", cmd),
+                        3000 => format!("React/Next ({})", cmd),
+                        8000..=8080 => format!("Node API ({})", cmd),
+                        27017 => format!("MongoDB ({})", cmd),
+                        4321 => format!("Astro ({})", cmd),
+                        _ => format!("Dev Port ({})", cmd),
                     };
 
-                    new_ports.push((friendly_name, extracted_port, "ONLINE".to_string()));
+                    new_ports.push((friendly_name, extracted_port, "ACTIVE".to_string()));
                 }
             }
 
-            // Optional: Sort ports numerically so the UI doesn't jump around
+            // STABLE SORTING: Sort by port number so the list never randomly shuffles!
             new_ports.sort_by(|a, b| a.1.parse::<u16>().unwrap_or(0).cmp(&b.1.parse::<u16>().unwrap_or(0)));
 
             if new_ports.is_empty() {
-                new_ports.push(("No dev ports found".to_string(), "---".to_string(), "IDLE".to_string()));
+                new_ports.push(("System Clear".to_string(), "---".to_string(), "IDLE".to_string()));
             }
 
             self.active_ports = new_ports;
