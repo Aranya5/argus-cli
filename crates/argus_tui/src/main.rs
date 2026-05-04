@@ -1,4 +1,4 @@
- use crossterm::{
+use crossterm::{
     event::{self, Event, KeyCode},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -11,19 +11,17 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, Paragraph, Row, Table},
     Terminal,
 };
-use std::{error::Error, io, time::{Duration, Instant}};
+// ADDED: BufRead for reading the log file line-by-line
+use std::{error::Error, io::{self, BufRead}, time::{Duration, Instant}};
 use sysinfo::System;
 
 // --- APP STATE ---
 struct AppState {
     voice_logs: Vec<String>,
-    // CHANGED: Now using Strings so we can dynamically generate them
     active_ports: Vec<(String, String, String)>, 
     
     sys: System, 
     ram_usage: String,
-    
-    // NEW: A timer to prevent our network scanner from frying your CPU
     last_port_scan: Instant,
 }
 
@@ -40,7 +38,6 @@ impl AppState {
             active_ports: Vec::new(),
             sys,
             ram_usage: String::new(),
-            // Force an immediate scan on boot
             last_port_scan: Instant::now() - Duration::from_secs(10), 
         }
     }
@@ -53,7 +50,7 @@ impl AppState {
         self.ram_usage = format!("{:.2} GB / {:.2} GB ({:.1}%)", used_gb, total_gb, percentage);
     }
 
-   // NEW: The Filtered, Stable Network Scanner
+    // The Filtered, Stable Network Scanner
     fn update_network(&mut self) {
         if self.last_port_scan.elapsed() < std::time::Duration::from_secs(2) {
             return; 
@@ -90,15 +87,15 @@ impl AppState {
 
                 // THE FILTER: Only care about actual Development Ports!
                 let is_dev_port = match port_number {
-                    3000..=3010 => true, // React, Next.js, Vue
-                    4000..=4010 => true, // General Dev
-                    4200 => true,        // Angular
-                    4321 => true,        // Astro
-                    5000..=5001 => true, // Python Flask
-                    5173 => true,        // Vite
-                    8000..=8080 => true, // Node, Express, Java
-                    27017 => true,       // MongoDB
-                    _ => false,          // IGNORE MAC BACKGROUND NOISE
+                    3000..=3010 => true, 
+                    4000..=4010 => true, 
+                    4200 => true,        
+                    4321 => true,        
+                    5000..=5001 => true, 
+                    5173 => true,        
+                    8000..=8080 => true, 
+                    27017 => true,       
+                    _ => false,          
                 };
 
                 if is_dev_port && !extracted_port.is_empty() {
@@ -115,7 +112,6 @@ impl AppState {
                 }
             }
 
-            // STABLE SORTING: Sort by port number so the list never randomly shuffles!
             new_ports.sort_by(|a, b| a.1.parse::<u16>().unwrap_or(0).cmp(&b.1.parse::<u16>().unwrap_or(0)));
 
             if new_ports.is_empty() {
@@ -123,6 +119,24 @@ impl AppState {
             }
 
             self.active_ports = new_ports;
+        }
+    }
+
+    // NEW: The Cross-Terminal Log Reader
+    fn update_logs(&mut self) {
+        // Try to open the shared log file
+        if let Ok(file) = std::fs::File::open("/tmp/argus.log") {
+            let reader = std::io::BufReader::new(file);
+            
+            // Read all lines, ignoring errors
+            let lines: Vec<String> = reader.lines().filter_map(Result::ok).collect();
+            
+            // Grab only the last 10 lines so it fits cleanly in the UI box
+            let tail: Vec<String> = lines.into_iter().rev().take(10).rev().collect();
+            
+            if !tail.is_empty() {
+                self.voice_logs = tail;
+            }
         }
     }
 }
@@ -152,6 +166,7 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut AppS
         // UPDATE ALL LIVE DATA BEFORE DRAWING
         app.update_telemetry();
         app.update_network();
+        app.update_logs(); // ADDED: Now it checks the file every frame
 
         terminal.draw(|f| {
             let size = f.area();
@@ -176,7 +191,7 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut AppS
             .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Blue)));
             f.render_widget(header, main_chunks[0]);
 
-            // Port Monitor (Now dynamic!)
+            // Port Monitor 
             let selected_style = Style::default().fg(Color::Cyan);
             let normal_style = Style::default().fg(Color::White);
             
@@ -186,7 +201,7 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut AppS
             let header_row = Row::new(header_cells).style(Style::default().add_modifier(Modifier::BOLD)).height(2);
             
             let rows = app.active_ports.iter().map(|item| {
-                let status_color = if item.2 == "ONLINE" { Color::Green } else { Color::Yellow };
+                let status_color = if item.2 == "ACTIVE" { Color::Green } else { Color::DarkGray };
                 Row::new(vec![
                     Span::styled(&item.0, normal_style),
                     Span::styled(&item.1, selected_style),

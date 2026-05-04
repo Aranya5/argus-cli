@@ -5,6 +5,8 @@ use std::sync::{Arc, Mutex};
 use vosk::{Model, Recognizer};
 use std::time::{Instant, Duration};
 use crate::router;
+use std::fs::OpenOptions;
+use std::io::Write;
 
 fn load_grammar_file(file_path: &str) -> Vec<String> {
     let mut words = Vec::new();
@@ -110,5 +112,17 @@ pub fn ignite() {
     // Keep the main thread alive so the microphone stream doesn't drop
     loop {
         std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+}
+
+// THE CROSS-TERMINAL LOGGER
+pub fn write_log(message: &str) {
+    if let Ok(mut file) = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("/tmp/argus.log") 
+    {
+        let log_entry = format!("{}\n", message);
+        let _ = file.write_all(log_entry.as_bytes());
     }
 }
