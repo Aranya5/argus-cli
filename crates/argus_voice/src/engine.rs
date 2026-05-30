@@ -114,15 +114,3 @@ pub fn ignite() {
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
 }
-
-// THE CROSS-TERMINAL LOGGER
-pub fn write_log(message: &str) {
-    if let Ok(mut file) = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open("/tmp/argus.log") 
-    {
-        let log_entry = format!("{}\n", message);
-        let _ = file.write_all(log_entry.as_bytes());
-    }
-}

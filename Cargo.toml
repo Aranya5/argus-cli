@@ -1,5 +1,7 @@
 [workspace]
 members = [
-    "crates/*"
+    "crates/argus_voice",
+    "crates/argus_daemon",
+    "crates/argus_tui",
+    "crates/argus_launcher" # <--- ADD THIS
 ]
-resolver = "2"

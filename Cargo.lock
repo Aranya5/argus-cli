@@ -53,6 +53,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "argus_launcher"
+version = "0.1.0"
+
+[[package]]
 name = "argus_tui"
 version = "0.1.0"
 dependencies = [
