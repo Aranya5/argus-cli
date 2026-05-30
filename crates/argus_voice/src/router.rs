@@ -1,5 +1,3 @@
-// crates/argus_voice/src/router.rs
-
 use crate::mappers;
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -18,6 +16,7 @@ pub fn write_log(message: &str) {
 
 pub fn execute(command: &str) {
     println!("--> Argus Executing: '{}'", command);
+    std::io::stdout().flush().unwrap();
 
     // 1. SANITIZE INPUT
     let clean_cmd = command
@@ -49,9 +48,13 @@ pub fn execute(command: &str) {
     }
     // TELEMETRY
     else if clean_cmd.contains("system memory") {
-        println!("--> ACTION: Reading telemetry...");
         write_log("[ACTION] Scanning system telemetry...");
-        argus_daemon::report_memory();
+        
+        // 1. Get the actual memory stats from the daemon
+        let memory_stats = argus_daemon::report_memory();
+        
+        // 2. Send those stats to the TUI logs!
+        write_log(&memory_stats); 
     }
     // TAB / SITE RESURRECTOR 
     else if clean_cmd.contains("last") || clean_cmd.contains("previous") || clean_cmd.contains("just closed") || clean_cmd.contains("reopen site") || clean_cmd.contains("reopen tab"){

@@ -14,19 +14,6 @@ pub fn assassinate_port(port: u16) {
     }
 }
 
-/// Reads the live RAM usage of the system
-pub fn report_memory() {
-    println!("--> [DAEMON] Scanning system telemetry...");
-    let mut sys = System::new_all();
-    sys.refresh_memory();
-    
-    // Convert bytes to Megabytes for readability
-    let total = sys.total_memory() / 1_048_576; 
-    let used = sys.used_memory() / 1_048_576;
-    
-    println!("--> [DAEMON] Memory Usage: {} MB / {} MB", used, total);
-}
-
 // 3. APP LAUNCHER (Dynamic Upgrade)
 pub fn launch_app(app_name: &str) {
     println!("--> [DAEMON] Attempting to boot '{}'...", app_name);
@@ -215,4 +202,16 @@ pub fn nuke_node_modules() {
     } else {
         println!("--> [DAEMON] ERROR: npm install failed. Check your internet connection.");
     }
+}
+
+pub fn report_memory() -> String {
+    let mut sys = System::new_all();
+    sys.refresh_memory();
+    
+    // Convert bytes to Megabytes
+    let total = sys.total_memory() / 1_048_576; 
+    let used = sys.used_memory() / 1_048_576;
+    
+    // RETURN the string instead of just printing it
+    format!("[DAEMON] Memory Usage: {} MB / {} MB", used, total)
 }

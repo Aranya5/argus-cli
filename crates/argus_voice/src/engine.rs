@@ -1,12 +1,8 @@
-// crates/argus_voice/src/engine.rs
-
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use std::sync::{Arc, Mutex};
 use vosk::{Model, Recognizer};
 use std::time::{Instant, Duration};
 use crate::router;
-use std::fs::OpenOptions;
-use std::io::Write;
 
 fn load_grammar_file(file_path: &str) -> Vec<String> {
     let mut words = Vec::new();
@@ -56,6 +52,10 @@ pub fn ignite() {
     let mut last_wake_time = Instant::now();
     let wake_timeout = Duration::from_secs(5);
 
+    // NEW: CUSTOM ENDPOINTING TRACKERS
+    let mut last_partial_text = String::new();
+    let mut last_partial_time = Instant::now();
+
     let stream = mic.build_input_stream(
         &config.into(),
         move |data: &[f32], _: &_| {
@@ -69,34 +69,64 @@ pub fn ignite() {
                 .collect();
             
             let mut rec = recognizer_clone.lock().unwrap();
+            let state = rec.accept_waveform(&i16_data);
             
-            if rec.accept_waveform(&i16_data) == vosk::DecodingState::Finalized {
+            let mut final_command = String::new();
+            let mut trigger_action = false;
+
+            // 1. Check if Vosk naturally finalized (rare in noisy rooms)
+            if state == vosk::DecodingState::Finalized {
                 if let vosk::CompleteResult::Single(res) = rec.result() {
-                    let command = res.text.trim();
-                    
-                    if !command.is_empty() && command != "[unk]" {
-                        
-                        if command.contains("argus") || command.contains("august") {
-                            is_awake = true;
-                            last_wake_time = Instant::now();
-                            println!("\n[EYE OPENED] Yes, Aranya?");
+                    final_command = res.text.to_string();
+                    trigger_action = true;
+                }
+            } else {
+                // 2. THE TURBO FIX: Read the partial result stream
+                let partial = rec.partial_result().partial.to_string();
+                
+                if !partial.is_empty() && partial != "[unk]" {
+                    if partial == last_partial_text {
+                        // If the text hasn't changed in 0.7 seconds, force execution!
+                        if last_partial_time.elapsed() > Duration::from_millis(700) {
+                            final_command = partial.clone();
+                            trigger_action = true;
+                            
+                            // Wipe Vosk's buffer so it doesn't double-fire
+                            rec.reset(); 
+                            last_partial_text.clear(); 
                         }
-
-                        if is_awake && last_wake_time.elapsed() < wake_timeout {
-                            if command != "argus" && command != "august" {
-                                
-                                // SEND TO ROUTER
-                                router::execute(command);
-
-                                is_awake = false;
-                                println!("[EYE CLOSED] Task complete.");
-                            }
-                        } 
-                        else if is_awake && last_wake_time.elapsed() >= wake_timeout {
-                            is_awake = false;
-                            println!("\n[EYE CLOSED] Going dormant...");
-                        }
+                    } else {
+                        // User is still speaking, update trackers
+                        last_partial_text = partial;
+                        last_partial_time = Instant::now();
                     }
+                }
+            }
+
+            let command = final_command.trim();
+
+            // 3. EXECUTE THE ROUTING LOGIC
+            if trigger_action && !command.is_empty() && command != "[unk]" {
+                
+                if command.contains("argus") || command.contains("august") {
+                    is_awake = true;
+                    last_wake_time = Instant::now();
+                    println!("\n[EYE OPENED] Yes, Aranya?");
+                }
+
+                if is_awake && last_wake_time.elapsed() < wake_timeout {
+                    if command != "argus" && command != "august" {
+                        
+                        // SEND TO ROUTER INSTANTLY
+                        router::execute(command);
+
+                        is_awake = false;
+                        println!("[EYE CLOSED] Task complete.");
+                    }
+                } 
+                else if is_awake && last_wake_time.elapsed() >= wake_timeout {
+                    is_awake = false;
+                    println!("\n[EYE CLOSED] Going dormant...");
                 }
             }
         },
@@ -109,7 +139,6 @@ pub fn ignite() {
     println!("---");
     println!("Argus is listening... (Press Ctrl+C to put him to sleep)");
 
-    // Keep the main thread alive so the microphone stream doesn't drop
     loop {
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
