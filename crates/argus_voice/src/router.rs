@@ -67,7 +67,7 @@ pub fn execute(command: &str) {
 
         if let Some(actual_url) = mappers::map_url(&target) {
             write_log(&format!("[ACTION] Opening URL: {}", target));
-            argus_daemon::open_url(actual_url);
+            argus_daemon::open_url(&actual_url);
         } else {
             println!("--> [DAEMON] ERROR: I don't have a URL mapped for '{}'.", target);
             write_log(&format!("[ERROR] Unmapped URL target: '{}'", target));

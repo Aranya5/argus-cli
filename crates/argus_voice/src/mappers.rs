@@ -1,4 +1,4 @@
-// crates/argus_voice/src/mappers.rs
+use crate::config;
 
 pub fn extract_dynamic_port(command: &str) -> Option<u16> {
     let mut target = command
@@ -42,18 +42,24 @@ pub fn extract_dynamic_port(command: &str) -> Option<u16> {
     digit_string.parse::<u16>().ok()
 }
 
-pub fn map_url(spoken: &str) -> Option<&'static str> {
-    // We catch the exact words, AND the spaced-out acoustic versions
-    match spoken {
-        "google" => Some("https://google.com"),
-        "github" | "git hub" | "get hub" => Some("https://github.com"),
-        "youtube" | "you tube" => Some("https://youtube.com"),
-        
-        // Developer Localhosts
-        "localhost" | "local host" | "local" => Some("http://localhost:3000"), 
-        "vite" | "veet" | "light" => Some("http://localhost:5173"), // Vosk sometimes hears "vite" as "veet" or "light"
-        "backend" | "back end" => Some("http://localhost:8080"), 
-        
-        _ => None,
+pub fn map_url(spoken: &str) -> Option<String> {
+    // 1. Load the live config file
+    let current_config = config::load_config();
+    
+    // 2. Clean up common Vosk mishearings before checking the config
+    let cleaned_spoken = spoken
+        .replace("git hub", "github")
+        .replace("get hub", "github")
+        .replace("you tube", "youtube")
+        .replace("local host", "local")
+        .replace("veet", "vite")
+        .replace("light", "vite")
+        .replace("back end", "backend");
+
+    // 3. Look up the spoken word in the [bookmarks] section of argus.toml
+    if let Some(url) = current_config.bookmarks.get(&cleaned_spoken) {
+        return Some(url.clone());
     }
+    
+    None
 }

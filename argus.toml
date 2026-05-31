@@ -1,0 +1,19 @@
+# ==========================================
+# ARGUS CLI - MASTER CONFIGURATION
+# ==========================================
+
+[network]
+# The ports Argus will actively monitor in the TUI
+dev_ports = [3000, 4000, 4200, 4321, 5173, 8000, 8080, 27017]
+
+[bookmarks]
+# Map your voice commands to actual URLs
+# Format: "spoken word" = "URL"
+google = "https://google.com"
+github = "https://github.com"
+youtube = "https://youtube.com"
+
+# Localhost shortcuts
+local = "http://localhost:3000"
+vite = "http://localhost:5173"
+backend = "http://localhost:8080"
