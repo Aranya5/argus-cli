@@ -113,6 +113,12 @@ pub fn execute(command: &str) {
         println!("--> ACTION: Going dormant...");
         write_log("[SYSTEM] Going dormant...");
     }
+    // DEV TOOLS: DOCKER NUKE
+    else if clean_cmd.contains("kill docker") || clean_cmd.contains("stop docker") || clean_cmd.contains("nuke docker") {
+        write_log("[ACTION] Authorized. Purging all Docker containers...");
+        argus_daemon::nuke_docker_containers();
+        write_log("[SYSTEM] Docker environment sanitized.");
+    }
     // FALLBACK CATCH
     else {
         println!("--> [DAEMON] WARNING: Command parsed, but no routing logic found for '{}'", clean_cmd);

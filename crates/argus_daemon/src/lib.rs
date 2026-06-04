@@ -215,3 +215,29 @@ pub fn report_memory() -> String {
     // RETURN the string instead of just printing it
     format!("[DAEMON] Memory Usage: {} MB / {} MB", used, total)
 }
+
+// crates/argus_daemon/src/lib.rs
+
+pub fn nuke_docker_containers() {
+    // 1. Get all running container IDs
+    let output = std::process::Command::new("docker")
+        .args(["ps", "-q"])
+        .output();
+
+    if let Ok(output) = output {
+        let ids = String::from_utf8_lossy(&output.stdout);
+        let id_list: Vec<&str> = ids.lines().collect();
+
+        if id_list.is_empty() {
+            println!("[DAEMON] No containers to nuke.");
+            return;
+        }
+
+        // 2. Force kill them all
+        for id in id_list {
+            let _ = std::process::Command::new("docker")
+                .args(["rm", "-f", id])
+                .output();
+        }
+    }
+}
