@@ -24,6 +24,9 @@ struct AppState {
     // Timer to prevent spamming the Docker daemon
     last_docker_scan: Instant, 
     
+    // NEW: Store server output logs
+    server_logs: Vec<String>,
+    
     sys: System, 
     ram_usage: String,
     last_port_scan: Instant,
@@ -41,6 +44,9 @@ impl AppState {
             
             docker_containers: Vec::new(),
             last_docker_scan: Instant::now() - Duration::from_secs(10),
+            
+            // NEW INITIALIZER
+            server_logs: vec!["[Server] Awaiting stream pipeline redirection...".to_string()],
             
             sys,
             ram_usage: String::new(),
@@ -180,6 +186,21 @@ impl AppState {
             }
         }
     }
+
+    // NEW: Server Log Reader
+    fn update_server_logs(&mut self) {
+        if let Ok(file) = std::fs::File::open("/tmp/server.log") {
+            let reader = std::io::BufReader::new(file);
+            let lines: Vec<String> = reader.lines().filter_map(Result::ok).collect();
+            
+            // Keep the last 100 lines in history
+            let tail: Vec<String> = lines.into_iter().rev().take(100).rev().collect();
+            
+            if !tail.is_empty() {
+                self.server_logs = tail;
+            }
+        }
+    }
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -208,7 +229,8 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut AppS
         app.update_telemetry();
         app.update_network();
         app.update_logs(); 
-        app.update_docker(); // ADDED: Docker scanner now runs
+        app.update_docker(); 
+        app.update_server_logs(); // ADDED: Server log scanner now runs
 
         terminal.draw(|f| {
             let size = f.area();
@@ -295,7 +317,6 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut AppS
                         .height(2);
                     
                     let rows = app.docker_containers.iter().map(|item| {
-                        // Color code the status: Green for "Up", Red for anything else
                         let status_color = if item.1.starts_with("Up") { Color::Green } else { Color::Red };
                         
                         Row::new(vec![
@@ -316,12 +337,41 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut AppS
                     f.render_widget(docker_table, main_chunks[2]);
                 }
                 2 => {
-                    // --- TAB 2: SERVER LOG TAILING ---
-                    let logs_placeholder = Paragraph::new("\n\n  [ Listening for localhost output... ]\n  No active server crashes detected.")
-                        .alignment(Alignment::Center)
-                        .style(Style::default().fg(Color::Red))
-                        .block(Block::default().title(" LIVE SERVER LOGS ").borders(Borders::ALL));
-                    f.render_widget(logs_placeholder, main_chunks[2]);
+                    // --- TAB 2: LIVE SERVER LOGS ---
+                    // Calculate height dynamically so logs pin to the bottom border cleanly
+                    let max_visible_lines = main_chunks[2].height.saturating_sub(2) as usize;
+                    
+                    let visible_server_logs: Vec<&String> = app.server_logs.iter()
+                        .rev()
+                        .take(max_visible_lines)
+                        .rev()
+                        .collect();
+
+                    let log_lines: Vec<Line> = visible_server_logs.iter()
+                        .map(|log| {
+                            // Smart color highlighting based on log severity
+                            let line_style = if log.contains("ERROR") || log.contains("Fail") || log.contains("Exception") {
+                                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
+                            } else if log.contains("WARN") || log.contains("500") {
+                                Style::default().fg(Color::Yellow)
+                            } else if log.contains("SUCCESS") || log.contains("GET") || log.contains("200") {
+                                Style::default().fg(Color::Green)
+                            } else {
+                                Style::default().fg(Color::White)
+                            };
+                            
+                            Line::from(Span::styled(*log, line_style))
+                        })
+                        .collect();
+
+                    let server_log_box = Paragraph::new(log_lines)
+                        .block(Block::default()
+                            .title(" LIVE APP SERVER LOGS ")
+                            .borders(Borders::ALL)
+                            .border_type(BorderType::Rounded)
+                            .border_style(Style::default().fg(Color::Red)));
+                    
+                    f.render_widget(server_log_box, main_chunks[2]);
                 }
                 _ => {}
             }
