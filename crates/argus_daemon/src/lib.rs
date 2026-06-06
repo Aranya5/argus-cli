@@ -241,3 +241,13 @@ pub fn nuke_docker_containers() {
         }
     }
 }
+
+// crates/argus_daemon/src/lib.rs
+
+pub fn execute_macro(cmd_string: &str) {
+    // Run the command through the standard Unix shell
+    let _ = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(cmd_string)
+        .spawn(); 
+}

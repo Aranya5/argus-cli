@@ -17,3 +17,9 @@ youtube = "https://youtube.com"
 local = "http://localhost:3000"
 vite = "http://localhost:5173"
 backend = "http://localhost:8080"
+
+# NEW: Custom Voice Macros
+[macros]
+"start backend" = "node server.js > /tmp/server.log 2>&1 &"
+"start frontend" = "npm run dev > /tmp/server.log 2>&1 &"
+"sleep" = "pmset sleepnow"

@@ -28,12 +28,26 @@ pub fn execute(command: &str) {
     // Log the sanitized command to the TUI Dashboard immediately
     write_log(&format!("[VOICE] Heard: '{}'", clean_cmd));
 
+    // ==========================================
+    // 2. CHECK CUSTOM MACROS FIRST (OVERRIDES)
+    // ==========================================
+    if let Some(macros) = crate::config::load_config().macros {
+        if let Some(shell_command) = macros.get(&clean_cmd) {
+            write_log(&format!("[ACTION] Executing macro: '{}'", clean_cmd));
+            argus_daemon::execute_macro(shell_command);
+            
+            // Exit the function early so we don't trigger the hardcoded routes below!
+            return; 
+        }
+    }
+
+    // ==========================================
+    // 3. STANDARD ROUTING LOGIC
+    // ==========================================
     let is_port_hit = clean_cmd.contains("kill port")
         || clean_cmd.contains("clear port")
         || clean_cmd.contains("close port")
         || clean_cmd.contains("terminate port");
-
-    // 2. ROUTE THE COMMAND
 
     // PORT KILLER
     if is_port_hit {
@@ -50,10 +64,7 @@ pub fn execute(command: &str) {
     else if clean_cmd.contains("system memory") {
         write_log("[ACTION] Scanning system telemetry...");
         
-        // 1. Get the actual memory stats from the daemon
         let memory_stats = argus_daemon::report_memory();
-        
-        // 2. Send those stats to the TUI logs!
         write_log(&memory_stats); 
     }
     // TAB / SITE RESURRECTOR 
