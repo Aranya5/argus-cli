@@ -7,7 +7,7 @@ Argus is an offline, voice-activated system daemon and Terminal User Interface (
 ## 🚀 Features
 * **The Voice Engine:** Fully offline speech-to-text powered by Vosk. (No cloud APIs, total privacy).
 * **The Daemon:** Aggressive OS-level process management. 
-* **The Dashboard:** A sleek TUI for visualizing CPU, RAM, and port traffic.
+* **The Dashboard:** A sleek TUI for visualizing CPU, RAM, and port traffic also docker and network.
 
 ## 🛠️ Installation & Setup
 *(Coming soon: Cargo install instructions and local setup guide)*
